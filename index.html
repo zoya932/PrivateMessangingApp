@@ -6,7 +6,7 @@
 <title>Private Chat</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
   body { background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 16px; }
   .container { max-width: 500px; margin: 0 auto; }
   h1 { color: #38bdf8; font-size: 22px; margin-bottom: 8px; text-align: center; }
@@ -14,12 +14,9 @@
   .card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid #334155; }
   label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   input, button { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 15px; margin-bottom: 8px; }
-  input:focus { outline: 2px solid #0ea5e9; }
   button { background: #0ea5e9; border: none; cursor: pointer; font-weight: 600; }
-  button:hover { background: #0284c7; }
   button.ghost { background: transparent; border: 1px solid #334155; }
   button.danger { background: #ef4444; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
   .hidden { display: none !important; }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; margin-bottom: 0; }
@@ -34,16 +31,18 @@
   .msg.out { background: #0ea5e9; margin-left: auto; text-align: right; }
   .msg .meta { font-size: 10px; opacity: 0.7; display: block; margin-top: 2px; }
   .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
-  .tabs button { margin: 0; }
   .lock { color: #22c55e; font-size: 12px; text-align: center; margin-top: 6px; }
+  #debugLog { background: #000; color: #22d3ee; font-family: monospace; font-size: 11px; padding: 8px; border-radius: 6px; max-height: 150px; overflow-y: auto; margin-top: 10px; }
+  #debugLog .err { color: #f87171; }
+  #debugLog .ok { color: #4ade80; }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>🔐 Private Chat</h1>
-  <p class="sub">Bina number, bina email — sirf username aur password.<br>Sab kuch aapke browser mein encrypt hota hai.</p>
+  <p class="sub">Bina number, bina email — sirf username aur password</p>
 
-  <!-- ============ AUTH SCREEN ============ -->
+  <!-- ============ AUTH ============ -->
   <div id="authScreen">
     <div class="card">
       <div class="tabs">
@@ -52,12 +51,13 @@
       </div>
 
       <div id="signupForm">
-        <label>Naya username chunein</label>
-        <input id="su_user" placeholder="jaise: rahul_khan" autocomplete="off">
-        <label>Password (strong rakhein — bhulna mat!)</label>
+        <label>Username (unique hona chahiye)</label>
+        <input id="su_user" placeholder="jaise: rahul_x7k9" autocomplete="off">
+        <label>Password</label>
         <input id="su_pass" type="password" placeholder="••••••••">
         <button onclick="signup()">Account banao</button>
         <div id="su_err" class="status err hidden"></div>
+        <p style="font-size:11px; color:#94a3b8; margin-top:8px;">💡 Tip: username ke aage kuch random add karein, jaise <code>rahul_8f2k</code></p>
       </div>
 
       <div id="loginForm" class="hidden">
@@ -71,13 +71,13 @@
     </div>
   </div>
 
-  <!-- ============ MAIN SCREEN ============ -->
+  <!-- ============ MAIN ============ -->
   <div id="mainScreen" class="hidden">
     <div class="card">
       <label>Aapki ID (dost ko bhejein):</label>
       <div class="id-box" id="myId">...</div>
       <div class="row" style="margin-top:8px;">
-        <button onclick="copyId()">📋 ID copy karein</button>
+        <button onclick="copyId()">📋 ID copy</button>
         <button class="ghost" onclick="logout()">Logout</button>
       </div>
       <div id="connStatus" class="status wait">Server se jud rahe hain...</div>
@@ -85,35 +85,57 @@
 
     <div class="card">
       <label>Dost ki ID daalein:</label>
-      <input id="peerId" placeholder="dost ka username" autocomplete="off">
+      <input id="peerId" placeholder="dost ka pura username" autocomplete="off">
       <button onclick="connectToPeer()">🔗 Connect</button>
     </div>
 
     <div class="card hidden" id="chatCard">
       <div class="row" style="align-items:center;">
         <strong id="peerLabel" style="flex:1;">Chat</strong>
-        <button class="danger" style="width:auto; padding:6px 12px; margin:0;" onclick="disconnect()">Call band</button>
+        <button class="danger" style="width:auto; padding:6px 12px; margin:0;" onclick="disconnect()">Band</button>
       </div>
       <div id="messages" style="margin-top:10px;"></div>
       <div class="row">
-        <input id="msgInput" placeholder="Message likhein..." style="margin:0;" onkeydown="if(event.key==='Enter')sendMessage()">
+        <input id="msgInput" placeholder="Message..." style="margin:0;" onkeydown="if(event.key==='Enter')sendMessage()">
         <button onclick="sendMessage()" style="width:auto; padding:0 16px; margin:0;">Bhejein</button>
       </div>
-      <div class="lock">🔒 End-to-end encrypted — sirf aap aur dost padh sakte hain</div>
+      <div class="lock">🔒 End-to-end encrypted</div>
+    </div>
+
+    <!-- DEBUG LOG — problem samajhne ke liye -->
+    <div class="card">
+      <label>🔧 Debug Log (problem yahan dikhegi):</label>
+      <div id="debugLog"></div>
+      <button class="ghost" style="margin-top:6px;" onclick="document.getElementById('debugLog').innerHTML=''">Clear</button>
     </div>
   </div>
 </div>
 
 <script>
 // =========================================================
+//   DEBUG LOGGER
+// =========================================================
+function log(msg, type='info') {
+  const el = document.getElementById('debugLog');
+  const line = document.createElement('div');
+  if (type === 'err') line.className = 'err';
+  if (type === 'ok') line.className = 'ok';
+  line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  console.log('[PrivateChat]', msg);
+}
+
+// =========================================================
 //   STATE
 // =========================================================
 let peer = null;
 let conn = null;
 let myUsername = null;
-let myPrivKey = null;   // in-memory only
+let myPrivKey = null;
 let myPubKey = null;
-let peerPubKey = null;  // friend's public key (received on connect)
+let peerPubKey = null;
+let keyExchangeDone = false;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -123,16 +145,14 @@ const b64 = {
 };
 
 // =========================================================
-//   CRYPTO (Web Crypto API — koi library nahi)
+//   CRYPTO
 // =========================================================
 async function deriveMasterKey(password, username) {
   const material = await crypto.subtle.importKey(
-    'raw', enc.encode(password + ':' + username),
-    'PBKDF2', false, ['deriveKey']
+    'raw', enc.encode(password + ':' + username), 'PBKDF2', false, ['deriveKey']
   );
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('private-chat-v1'),
-      iterations: 100000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: enc.encode('private-chat-v1'), iterations: 100000, hash: 'SHA-256' },
     material,
     { name: 'AES-GCM', length: 256 },
     false, ['encrypt', 'decrypt']
@@ -140,9 +160,7 @@ async function deriveMasterKey(password, username) {
 }
 
 async function generateIdentity() {
-  const kp = await crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
-  );
+  const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   return {
     publicKey:  await crypto.subtle.exportKey('jwk', kp.publicKey),
     privateKey: await crypto.subtle.exportKey('jwk', kp.privateKey)
@@ -162,7 +180,13 @@ async function decryptWithKey(stored, masterKey) {
   return dec.decode(pt);
 }
 
-// Message encrypt — ECDH shared secret + AES-GCM
+async function deriveShared(privJwk, pubJwk) {
+  const priv = await crypto.subtle.importKey('jwk', privJwk, { name: 'ECDH' }, false, ['deriveBits']);
+  const pub  = await crypto.subtle.importKey('jwk', pubJwk,  { name: 'ECDH' }, false, []);
+  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256);
+  return crypto.subtle.importKey('raw', bits, { name: 'AES-GCM', length: 256 }, false, ['encrypt','decrypt']);
+}
+
 async function encryptMessage(text, privJwk, pubJwk) {
   const shared = await deriveShared(privJwk, pubJwk);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -176,13 +200,6 @@ async function decryptMessage(payload, privJwk, pubJwk) {
     { name: 'AES-GCM', iv: b64.dec(payload.iv) }, shared, b64.dec(payload.data)
   );
   return dec.decode(pt);
-}
-
-async function deriveShared(privJwk, pubJwk) {
-  const priv = await crypto.subtle.importKey('jwk', privJwk, { name: 'ECDH' }, false, ['deriveBits']);
-  const pub  = await crypto.subtle.importKey('jwk', pubJwk,  { name: 'ECDH' }, false, []);
-  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256);
-  return crypto.subtle.importKey('raw', bits, { name: 'AES-GCM', length: 256 }, false, ['encrypt','decrypt']);
 }
 
 // =========================================================
@@ -205,31 +222,28 @@ async function signup() {
   const u = su_user.value.trim().toLowerCase();
   const p = su_pass.value;
   su_err.classList.add('hidden');
-  if (!/^[a-z0-9_]{3,20}$/.test(u)) return showErr('su_err','Username: 3-20 chars, a-z 0-9 _ hi');
+  if (!/^[a-z0-9_]{3,30}$/.test(u)) return showErr('su_err','Username: sirf a-z 0-9 _ allowed');
   if (p.length < 6) return showErr('su_err','Password kam se kam 6 characters');
 
-  // Check if username already taken on this device
   if (localStorage.getItem('pc_user_' + u)) {
     return showErr('su_err','Ye username pehle se hai is device par');
   }
 
   try {
+    log('Creating keys...');
     const masterKey = await deriveMasterKey(p, u);
     const { publicKey, privateKey } = await generateIdentity();
     const encryptedPriv = await encryptWithKey(JSON.stringify(privateKey), masterKey);
 
-    // Save to localStorage (encrypted private key only)
-    localStorage.setItem('pc_user_' + u, JSON.stringify({
-      publicKey,
-      encryptedPriv
-    }));
+    localStorage.setItem('pc_user_' + u, JSON.stringify({ publicKey, encryptedPriv }));
+    log('Account bana diya ✓', 'ok');
 
-    // Start session
     myPrivKey = privateKey;
     myPubKey = publicKey;
     myUsername = u;
     startPeer();
   } catch (e) {
+    log('Signup error: ' + e.message, 'err');
     showErr('su_err', 'Error: ' + e.message);
   }
 }
@@ -240,9 +254,10 @@ async function login() {
   li_err.classList.add('hidden');
 
   const stored = localStorage.getItem('pc_user_' + u);
-  if (!stored) return showErr('li_err','Username nahi mila. Pehle account banayein.');
+  if (!stored) return showErr('li_err','Username nahi mila');
 
   try {
+    log('Decrypting keys...');
     const data = JSON.parse(stored);
     const masterKey = await deriveMasterKey(p, u);
     const privateKey = JSON.parse(await decryptWithKey(data.encryptedPriv, masterKey));
@@ -250,8 +265,10 @@ async function login() {
     myPrivKey = privateKey;
     myPubKey = data.publicKey;
     myUsername = u;
+    log('Login successful ✓', 'ok');
     startPeer();
   } catch (e) {
+    log('Login error: ' + e.message, 'err');
     showErr('li_err','Password galat ya data kharab');
   }
 }
@@ -265,49 +282,58 @@ function logout() {
 }
 
 // =========================================================
-//   PEERJS — P2P Connection
+//   PEERJS
 // =========================================================
 function startPeer() {
   authScreen.classList.add('hidden');
   mainScreen.classList.remove('hidden');
   myId.textContent = myUsername;
 
-  // PeerJS ID = username (simple, unique per user)
+  log('Connecting to PeerJS server...');
+
   peer = new Peer(myUsername, {
-    debug: 1,
+    debug: 2,
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' }
       ]
     }
   });
 
   peer.on('open', id => {
+    log('Online! ID: ' + id, 'ok');
     connStatus.className = 'status ok';
     connStatus.textContent = '✅ Online — ID: ' + id;
   });
 
   peer.on('connection', c => {
+    log('Incoming connection from: ' + c.peer);
     conn = c;
     setupConnection();
   });
 
   peer.on('error', err => {
+    log('PeerJS error: ' + err.type + ' — ' + (err.message || ''), 'err');
     connStatus.className = 'status err';
     if (err.type === 'unavailable-id') {
-      connStatus.textContent = '❌ Ye username pehle se koi use kar raha hai';
+      connStatus.textContent = '❌ Username pehle se kisi ne le rakha hai. Dusra naam try karein.';
     } else if (err.type === 'peer-unavailable') {
-      connStatus.textContent = '❌ Dost online nahi hai';
+      connStatus.textContent = '❌ Dost online nahi hai ya galat ID';
+    } else if (err.type === 'network' || err.type === 'server-error') {
+      connStatus.textContent = '❌ Network error — internet check karein';
     } else {
       connStatus.textContent = '❌ Error: ' + err.type;
     }
   });
 
   peer.on('disconnected', () => {
+    log('Disconnected, reconnecting...', 'err');
     connStatus.className = 'status wait';
     connStatus.textContent = 'Reconnect ho raha hai...';
-    peer.reconnect();
+    setTimeout(() => peer.reconnect(), 2000);
   });
 }
 
@@ -316,6 +342,7 @@ function connectToPeer() {
   if (!target) return;
   if (target === myUsername) return alert('Khud se connect nahi kar sakte');
 
+  log('Connecting to: ' + target);
   connStatus.className = 'status wait';
   connStatus.textContent = 'Dost se jud rahe hain...';
 
@@ -325,41 +352,56 @@ function connectToPeer() {
 
 function setupConnection() {
   conn.on('open', () => {
+    log('✅ Connection open with: ' + conn.peer, 'ok');
     chatCard.classList.remove('hidden');
     peerLabel.textContent = '💬 ' + conn.peer;
     connStatus.className = 'status ok';
     connStatus.textContent = '✅ Connected with ' + conn.peer;
 
-    // Exchange public keys
+    // Send public key first
+    log('Sending public key...');
     conn.send({ type: 'hello', publicKey: myPubKey });
+    keyExchangeDone = false;
   });
 
   conn.on('data', async data => {
+    log('Received: ' + data.type);
+
     if (data.type === 'hello') {
       peerPubKey = data.publicKey;
+      keyExchangeDone = true;
+      log('✅ Public key received from friend', 'ok');
       return;
     }
+
     if (data.type === 'msg') {
-      if (!peerPubKey) return;
+      if (!peerPubKey) {
+        log('❌ Public key nahi mila abhi, message drop', 'err');
+        return;
+      }
       try {
         const text = await decryptMessage(data.payload, myPrivKey, peerPubKey);
         addMessage(text, 'in', data.time);
+        log('Message decrypted ✓', 'ok');
       } catch (e) {
+        log('Decrypt fail: ' + e.message, 'err');
         addMessage('[decrypt fail]', 'in');
       }
     }
   });
 
   conn.on('close', () => {
+    log('Connection closed', 'err');
     connStatus.className = 'status err';
     connStatus.textContent = '❌ Connection band ho gayi';
     chatCard.classList.add('hidden');
     conn = null;
     peerPubKey = null;
+    keyExchangeDone = false;
   });
 
   conn.on('error', err => {
-    console.error(err);
+    log('Connection error: ' + err, 'err');
   });
 }
 
@@ -372,12 +414,22 @@ function disconnect() {
 // =========================================================
 async function sendMessage() {
   const text = msgInput.value.trim();
-  if (!text || !conn || !peerPubKey) return;
+  if (!text) return;
+  if (!conn) return log('❌ Pehle connect karein', 'err');
+  if (!conn.open) return log('❌ Connection abhi open nahi hai', 'err');
+  if (!peerPubKey) return log('❌ Friend ka public key nahi mila abhi', 'err');
+
   msgInput.value = '';
 
-  const payload = await encryptMessage(text, myPrivKey, peerPubKey);
-  conn.send({ type: 'msg', payload, time: Date.now() });
-  addMessage(text, 'out', Date.now());
+  try {
+    log('Encrypting message...');
+    const payload = await encryptMessage(text, myPrivKey, peerPubKey);
+    conn.send({ type: 'msg', payload, time: Date.now() });
+    addMessage(text, 'out', Date.now());
+    log('Message sent ✓', 'ok');
+  } catch (e) {
+    log('Send error: ' + e.message, 'err');
+  }
 }
 
 function addMessage(text, dir, time) {
