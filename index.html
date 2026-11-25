@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Private Chat</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px; font-family: sans-serif; background: #111; color: #eee; }
+  input, button { font-size: 16px; padding: 10px; border: 0; border-radius: 8px; }
+  input { width: 100%; margin: 6px 0; }
+  button { background: #0a7cff; color: #fff; margin: 4px 4px 4px 0; }
+  button:disabled { opacity: .4; }
+  #myId { word-break: break-all; background: #222; padding: 10px; border-radius: 8px; user-select: all; }
+  #status { color: #ffcc00; }
+  video { width: 100%; background: #000; border-radius: 8px; margin-top: 6px; }
+  #localVideo { width: 35%; }
+  #chat { height: 220px; overflow-y: auto; background: #222; border-radius: 8px; padding: 8px; }
+  #chat p { margin: 4px 0; word-break: break-word; }
+</style>
+</head>
+<body>
+  <h2>Private Chat</h2>
+  <div>Aapki ID (dost ko bhejein):</div>
+  <div id="myId">...</div>
+  <button id="copyBtn">ID copy karein</button>
+  <p id="status">Server se jud rahe hain...</p>
+
+  <input id="friendId" placeholder="Dost ki ID yahan dalein" autocomplete="off">
+  <button id="connectBtn">Connect</button>
+
+  <div>
+    <button id="audioBtn" disabled>Audio call</button>
+    <button id="videoBtn" disabled>Video call</button>
+    <button id="endBtn" disabled>Call band</button>
+  </div>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <video id="localVideo" autoplay playsinline muted></video>
+
+  <div id="chat"></div>
+  <input id="msg" placeholder="Message likhein">
+  <button id="sendBtn" disabled>Bhejein</button>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let conn = null;      // chat connection
+let ready = false;    // dost ne accept kiya?
+let call = null;      // current call
+let stream = null;    // apna camera/mic
+let busy = false;     // call chal rahi hai ya shuru ho rahi hai
+let callNo = 0;       // purani call ko pehchanne ke liye
+
+// Account: random ID, sirf isi phone mein save
+function makeId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return 'u' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+let myId;
+try {
+  myId = localStorage.getItem('chatId') || makeId();
+  localStorage.setItem('chatId', myId);
+} catch (e) {
+  myId = makeId();
+}
+$('myId').textContent = myId;
+
+const setStatus = text => $('status').textContent = text;
+
+function addMessage(who, text) {
+  const p = document.createElement('p');
+  p.textContent = who + ': ' + text;
+  $('chat').appendChild(p);
+  $('chat').scrollTop = $('chat').scrollHeight;
+}
+
+function updateButtons() {
+  $('sendBtn').disabled = !ready;
+  $('audioBtn').disabled = !ready || busy;
+  $('videoBtn').disabled = !ready || busy;
+  $('endBtn').disabled = !busy;
+}
+
+if (typeof Peer === 'undefined') {
+  setStatus('PeerJS load nahi hua. Internet check karein.');
+  throw new Error('PeerJS missing');
+}
+const peer = new Peer(myId);
+
+peer.on('open', () => setStatus('Online. Connect karne ke liye tayyar.'));
+peer.on('disconnected', () => {
+  setStatus('Server se connection toota, dobara jud rahe hain...');
+  setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 3000);
+});
+peer.on('error', err => {
+  if (err.type === 'peer-unavailable') {
+    setStatus('Dost online nahi hai ya ID galat hai.');
+    if (conn && !ready) conn = null;
+  } else if (err.type === 'unavailable-id') {
+    setStatus('Yeh ID pehle se khuli hai. Dusre tab band karke reload karein.');
+  } else {
+    setStatus('Error: ' + err.type);
+  }
+});
+
+// ---------- Chat ----------
+function setupConnection(c) {
+  c.on('data', data => {
+    if (c !== conn || !data) return;
+    if (data.type === 'accept') {
+      ready = true;
+      setStatus('Connected ✅');
+      updateButtons();
+    } else if (data.type === 'reject') {
+      conn = null;
+      setStatus('Request accept nahi hui.');
+      c.close();
+    } else if (data.type === 'chat' && ready) {
+      addMessage('Dost', String(data.text));
+    } else if (data.type === 'hangup') {
+      endCall(false);
+    }
+  });
+  c.on('close', () => {
+    if (c !== conn) return;
+    endCall(false);
+    conn = null;
+    ready = false;
+    setStatus('Chat band ho gayi.');
+    updateButtons();
+  });
+}
+
+$('connectBtn').onclick = () => {
+  const id = $('friendId').value.trim();
+  if (!id || id === myId) return setStatus('Dost ki sahi ID dalein.');
+  if (ready) return setStatus('Pehle se connected hain. Naye dost ke liye page reload karein.');
+  if (!peer.open) return setStatus('Abhi online nahi hue, thoda rukein.');
+  const old = conn;
+  conn = peer.connect(id, { reliable: true });
+  if (old) old.close();
+  setupConnection(conn);
+  setStatus('Dost ke accept karne ka wait...');
+};
+
+peer.on('connection', c => {
+  c.on('open', () => {
+    const allow = !conn && confirm('Connection request:\n' + c.peer + '\nAccept karein?');
+    if (!allow) {
+      c.send({ type: 'reject' });
+      setTimeout(() => c.close(), 1000);
+      return;
+    }
+    conn = c;
+    ready = true;
+    setupConnection(c);
+    c.send({ type: 'accept' });
+    $('friendId').value = c.peer;
+    setStatus('Connected ✅');
+    updateButtons();
+  });
+});
+
+function sendMessage() {
+  const text = $('msg').value.trim();
+  if (!text || !ready) return;
+  conn.send({ type: 'chat', text });
+  addMessage('Aap', text);
+  $('msg').value = '';
+}
+$('sendBtn').onclick = sendMessage;
+$('msg').onkeydown = e => { if (e.key === 'Enter') sendMessage(); };
+
+// ---------- Call ----------
+async function getMedia(video, myCall) {
+  const s = await navigator.mediaDevices.getUserMedia({ audio: true, video });
+  if (myCall !== callNo) {        // is beech call band ho gayi
+    s.getTracks().forEach(t => t.stop());
+    return null;
+  }
+  stream = s;
+  $('localVideo').srcObject = s;
+  return s;
+}
+
+function setupCall(c) {
+  call = c;
+  c.on('stream', remote => {
+    if (c !== call) return;
+    $('remoteVideo').srcObject = remote;
+    $('remoteVideo').play().catch(() => setStatus('Awaaz ke liye video par tap karein.'));
+    setStatus('Call chalu hai 📞');
+  });
+  c.on('close', () => { if (c === call) endCall(false); });
+  c.on('error', () => { if (c === call) endCall(true); });
+}
+
+async function startCall(video) {
+  if (!ready || busy) return;
+  busy = true;
+  const myCall = ++callNo;
+  updateButtons();
+  try {
+    const s = await getMedia(video, myCall);
+    if (!s) return;
+    setupCall(peer.call(conn.peer, s, { metadata: { video } }));
+    setStatus('Call ja rahi hai...');
+  } catch (e) {
+    setStatus('Camera/mic nahi mila: ' + e.name);
+    endCall(false);
+  }
+}
+
+peer.on('call', async incoming => {
+  // Sirf connected dost ki call
+  if (!ready || incoming.peer !== conn.peer || busy) return incoming.close();
+  busy = true;
+  const myCall = ++callNo;
+  call = incoming;
+  updateButtons();
+  const video = !!(incoming.metadata && incoming.metadata.video);
+  if (!confirm((video ? 'Video' : 'Audio') + ' call aa rahi hai. Uthayein?')) {
+    return endCall(true);
+  }
+  try {
+    const s = await getMedia(video, myCall);
+    if (!s) return;
+    setupCall(incoming);
+    incoming.answer(s);
+  } catch (e) {
+    setStatus('Camera/mic nahi mila: ' + e.name);
+    endCall(true);
+  }
+});
+
+function endCall(tellFriend) {
+  if (!busy) return;
+  busy = false;
+  callNo++;
+  const old = call;
+  call = null;
+  if (old) old.close();
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  $('localVideo').srcObject = null;
+  $('remoteVideo').srcObject = null;
+  if (tellFriend && ready) conn.send({ type: 'hangup' });
+  if (ready) setStatus('Connected ✅');
+  updateButtons();
+}
+
+$('audioBtn').onclick = () => startCall(false);
+$('videoBtn').onclick = () => startCall(true);
+$('endBtn').onclick = () => endCall(true);
+$('remoteVideo').onclick = () => $('remoteVideo').play();
+
+$('copyBtn').onclick = () => {
+  navigator.clipboard.writeText(myId)
+    .then(() => setStatus('ID copy ho gayi.'))
+    .catch(() => setStatus('ID ko dabakar rakhein aur copy karein.'));
+};
+</script>
+</body>
+</html>
