@@ -2,263 +2,404 @@
 <html lang="hi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Private Chat</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 12px; font-family: sans-serif; background: #111; color: #eee; }
-  input, button { font-size: 16px; padding: 10px; border: 0; border-radius: 8px; }
-  input { width: 100%; margin: 6px 0; }
-  button { background: #0a7cff; color: #fff; margin: 4px 4px 4px 0; }
-  button:disabled { opacity: .4; }
-  #myId { word-break: break-all; background: #222; padding: 10px; border-radius: 8px; user-select: all; }
-  #status { color: #ffcc00; }
-  video { width: 100%; background: #000; border-radius: 8px; margin-top: 6px; }
-  #localVideo { width: 35%; }
-  #chat { height: 220px; overflow-y: auto; background: #222; border-radius: 8px; padding: 8px; }
-  #chat p { margin: 4px 0; word-break: break-word; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+  body { background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 16px; }
+  .container { max-width: 500px; margin: 0 auto; }
+  h1 { color: #38bdf8; font-size: 22px; margin-bottom: 8px; text-align: center; }
+  .sub { color: #94a3b8; font-size: 13px; text-align: center; margin-bottom: 20px; }
+  .card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid #334155; }
+  label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+  input, button { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 15px; margin-bottom: 8px; }
+  input:focus { outline: 2px solid #0ea5e9; }
+  button { background: #0ea5e9; border: none; cursor: pointer; font-weight: 600; }
+  button:hover { background: #0284c7; }
+  button.ghost { background: transparent; border: 1px solid #334155; }
+  button.danger { background: #ef4444; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .hidden { display: none !important; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; margin-bottom: 0; }
+  .id-box { background: #0f172a; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 14px; word-break: break-all; color: #22d3ee; border: 1px dashed #334155; }
+  .status { font-size: 12px; padding: 8px; border-radius: 6px; margin-top: 8px; text-align: center; }
+  .status.ok { background: #064e3b; color: #6ee7b7; }
+  .status.wait { background: #78350f; color: #fcd34d; }
+  .status.err { background: #7f1d1d; color: #fca5a5; }
+  #messages { height: 300px; overflow-y: auto; background: #0b1220; border-radius: 8px; padding: 10px; margin-bottom: 8px; border: 1px solid #334155; }
+  .msg { padding: 8px 12px; margin: 4px 0; border-radius: 12px; max-width: 80%; word-wrap: break-word; font-size: 14px; }
+  .msg.in { background: #334155; }
+  .msg.out { background: #0ea5e9; margin-left: auto; text-align: right; }
+  .msg .meta { font-size: 10px; opacity: 0.7; display: block; margin-top: 2px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { margin: 0; }
+  .lock { color: #22c55e; font-size: 12px; text-align: center; margin-top: 6px; }
 </style>
 </head>
 <body>
-  <h2>Private Chat</h2>
-  <div>Aapki ID (dost ko bhejein):</div>
-  <div id="myId">...</div>
-  <button id="copyBtn">ID copy karein</button>
-  <p id="status">Server se jud rahe hain...</p>
+<div class="container">
+  <h1>🔐 Private Chat</h1>
+  <p class="sub">Bina number, bina email — sirf username aur password.<br>Sab kuch aapke browser mein encrypt hota hai.</p>
 
-  <input id="friendId" placeholder="Dost ki ID yahan dalein" autocomplete="off">
-  <button id="connectBtn">Connect</button>
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="authScreen">
+    <div class="card">
+      <div class="tabs">
+        <button onclick="showTab('login')" id="tabLogin">Login</button>
+        <button onclick="showTab('signup')" id="tabSignup" class="ghost">Naya Account</button>
+      </div>
 
-  <div>
-    <button id="audioBtn" disabled>Audio call</button>
-    <button id="videoBtn" disabled>Video call</button>
-    <button id="endBtn" disabled>Call band</button>
+      <div id="signupForm">
+        <label>Naya username chunein</label>
+        <input id="su_user" placeholder="jaise: rahul_khan" autocomplete="off">
+        <label>Password (strong rakhein — bhulna mat!)</label>
+        <input id="su_pass" type="password" placeholder="••••••••">
+        <button onclick="signup()">Account banao</button>
+        <div id="su_err" class="status err hidden"></div>
+      </div>
+
+      <div id="loginForm" class="hidden">
+        <label>Username</label>
+        <input id="li_user" placeholder="username" autocomplete="off">
+        <label>Password</label>
+        <input id="li_pass" type="password" placeholder="••••••••">
+        <button onclick="login()">Login</button>
+        <div id="li_err" class="status err hidden"></div>
+      </div>
+    </div>
   </div>
-  <video id="remoteVideo" autoplay playsinline></video>
-  <video id="localVideo" autoplay playsinline muted></video>
 
-  <div id="chat"></div>
-  <input id="msg" placeholder="Message likhein">
-  <button id="sendBtn" disabled>Bhejein</button>
+  <!-- ============ MAIN SCREEN ============ -->
+  <div id="mainScreen" class="hidden">
+    <div class="card">
+      <label>Aapki ID (dost ko bhejein):</label>
+      <div class="id-box" id="myId">...</div>
+      <div class="row" style="margin-top:8px;">
+        <button onclick="copyId()">📋 ID copy karein</button>
+        <button class="ghost" onclick="logout()">Logout</button>
+      </div>
+      <div id="connStatus" class="status wait">Server se jud rahe hain...</div>
+    </div>
 
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <div class="card">
+      <label>Dost ki ID daalein:</label>
+      <input id="peerId" placeholder="dost ka username" autocomplete="off">
+      <button onclick="connectToPeer()">🔗 Connect</button>
+    </div>
+
+    <div class="card hidden" id="chatCard">
+      <div class="row" style="align-items:center;">
+        <strong id="peerLabel" style="flex:1;">Chat</strong>
+        <button class="danger" style="width:auto; padding:6px 12px; margin:0;" onclick="disconnect()">Call band</button>
+      </div>
+      <div id="messages" style="margin-top:10px;"></div>
+      <div class="row">
+        <input id="msgInput" placeholder="Message likhein..." style="margin:0;" onkeydown="if(event.key==='Enter')sendMessage()">
+        <button onclick="sendMessage()" style="width:auto; padding:0 16px; margin:0;">Bhejein</button>
+      </div>
+      <div class="lock">🔒 End-to-end encrypted — sirf aap aur dost padh sakte hain</div>
+    </div>
+  </div>
+</div>
+
 <script>
-const $ = id => document.getElementById(id);
-let conn = null;      // chat connection
-let ready = false;    // dost ne accept kiya?
-let call = null;      // current call
-let stream = null;    // apna camera/mic
-let busy = false;     // call chal rahi hai ya shuru ho rahi hai
-let callNo = 0;       // purani call ko pehchanne ke liye
+// =========================================================
+//   STATE
+// =========================================================
+let peer = null;
+let conn = null;
+let myUsername = null;
+let myPrivKey = null;   // in-memory only
+let myPubKey = null;
+let peerPubKey = null;  // friend's public key (received on connect)
 
-// Account: random ID, sirf isi phone mein save
-function makeId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  return 'u' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-}
-let myId;
-try {
-  myId = localStorage.getItem('chatId') || makeId();
-  localStorage.setItem('chatId', myId);
-} catch (e) {
-  myId = makeId();
-}
-$('myId').textContent = myId;
-
-const setStatus = text => $('status').textContent = text;
-
-function addMessage(who, text) {
-  const p = document.createElement('p');
-  p.textContent = who + ': ' + text;
-  $('chat').appendChild(p);
-  $('chat').scrollTop = $('chat').scrollHeight;
-}
-
-function updateButtons() {
-  $('sendBtn').disabled = !ready;
-  $('audioBtn').disabled = !ready || busy;
-  $('videoBtn').disabled = !ready || busy;
-  $('endBtn').disabled = !busy;
-}
-
-if (typeof Peer === 'undefined') {
-  setStatus('PeerJS load nahi hua. Internet check karein.');
-  throw new Error('PeerJS missing');
-}
-const peer = new Peer(myId);
-
-peer.on('open', () => setStatus('Online. Connect karne ke liye tayyar.'));
-peer.on('disconnected', () => {
-  setStatus('Server se connection toota, dobara jud rahe hain...');
-  setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 3000);
-});
-peer.on('error', err => {
-  if (err.type === 'peer-unavailable') {
-    setStatus('Dost online nahi hai ya ID galat hai.');
-    if (conn && !ready) conn = null;
-  } else if (err.type === 'unavailable-id') {
-    setStatus('Yeh ID pehle se khuli hai. Dusre tab band karke reload karein.');
-  } else {
-    setStatus('Error: ' + err.type);
-  }
-});
-
-// ---------- Chat ----------
-function setupConnection(c) {
-  c.on('data', data => {
-    if (c !== conn || !data) return;
-    if (data.type === 'accept') {
-      ready = true;
-      setStatus('Connected ✅');
-      updateButtons();
-    } else if (data.type === 'reject') {
-      conn = null;
-      setStatus('Request accept nahi hui.');
-      c.close();
-    } else if (data.type === 'chat' && ready) {
-      addMessage('Dost', String(data.text));
-    } else if (data.type === 'hangup') {
-      endCall(false);
-    }
-  });
-  c.on('close', () => {
-    if (c !== conn) return;
-    endCall(false);
-    conn = null;
-    ready = false;
-    setStatus('Chat band ho gayi.');
-    updateButtons();
-  });
-}
-
-$('connectBtn').onclick = () => {
-  const id = $('friendId').value.trim();
-  if (!id || id === myId) return setStatus('Dost ki sahi ID dalein.');
-  if (ready) return setStatus('Pehle se connected hain. Naye dost ke liye page reload karein.');
-  if (!peer.open) return setStatus('Abhi online nahi hue, thoda rukein.');
-  const old = conn;
-  conn = peer.connect(id, { reliable: true });
-  if (old) old.close();
-  setupConnection(conn);
-  setStatus('Dost ke accept karne ka wait...');
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const b64 = {
+  enc: buf => btoa(String.fromCharCode(...new Uint8Array(buf))),
+  dec: str => Uint8Array.from(atob(str), c => c.charCodeAt(0))
 };
 
-peer.on('connection', c => {
-  c.on('open', () => {
-    const allow = !conn && confirm('Connection request:\n' + c.peer + '\nAccept karein?');
-    if (!allow) {
-      c.send({ type: 'reject' });
-      setTimeout(() => c.close(), 1000);
+// =========================================================
+//   CRYPTO (Web Crypto API — koi library nahi)
+// =========================================================
+async function deriveMasterKey(password, username) {
+  const material = await crypto.subtle.importKey(
+    'raw', enc.encode(password + ':' + username),
+    'PBKDF2', false, ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: enc.encode('private-chat-v1'),
+      iterations: 100000, hash: 'SHA-256' },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false, ['encrypt', 'decrypt']
+  );
+}
+
+async function generateIdentity() {
+  const kp = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
+  );
+  return {
+    publicKey:  await crypto.subtle.exportKey('jwk', kp.publicKey),
+    privateKey: await crypto.subtle.exportKey('jwk', kp.privateKey)
+  };
+}
+
+async function encryptWithKey(data, masterKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, masterKey, enc.encode(data));
+  return { iv: b64.enc(iv), data: b64.enc(ct) };
+}
+
+async function decryptWithKey(stored, masterKey) {
+  const pt = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: b64.dec(stored.iv) }, masterKey, b64.dec(stored.data)
+  );
+  return dec.decode(pt);
+}
+
+// Message encrypt — ECDH shared secret + AES-GCM
+async function encryptMessage(text, privJwk, pubJwk) {
+  const shared = await deriveShared(privJwk, pubJwk);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, shared, enc.encode(text));
+  return { iv: b64.enc(iv), data: b64.enc(ct) };
+}
+
+async function decryptMessage(payload, privJwk, pubJwk) {
+  const shared = await deriveShared(privJwk, pubJwk);
+  const pt = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: b64.dec(payload.iv) }, shared, b64.dec(payload.data)
+  );
+  return dec.decode(pt);
+}
+
+async function deriveShared(privJwk, pubJwk) {
+  const priv = await crypto.subtle.importKey('jwk', privJwk, { name: 'ECDH' }, false, ['deriveBits']);
+  const pub  = await crypto.subtle.importKey('jwk', pubJwk,  { name: 'ECDH' }, false, []);
+  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256);
+  return crypto.subtle.importKey('raw', bits, { name: 'AES-GCM', length: 256 }, false, ['encrypt','decrypt']);
+}
+
+// =========================================================
+//   AUTH
+// =========================================================
+function showTab(which) {
+  signupForm.classList.toggle('hidden', which !== 'signup');
+  loginForm.classList.toggle('hidden', which !== 'login');
+  tabSignup.classList.toggle('ghost', which !== 'signup');
+  tabLogin.classList.toggle('ghost', which !== 'login');
+}
+
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function signup() {
+  const u = su_user.value.trim().toLowerCase();
+  const p = su_pass.value;
+  su_err.classList.add('hidden');
+  if (!/^[a-z0-9_]{3,20}$/.test(u)) return showErr('su_err','Username: 3-20 chars, a-z 0-9 _ hi');
+  if (p.length < 6) return showErr('su_err','Password kam se kam 6 characters');
+
+  // Check if username already taken on this device
+  if (localStorage.getItem('pc_user_' + u)) {
+    return showErr('su_err','Ye username pehle se hai is device par');
+  }
+
+  try {
+    const masterKey = await deriveMasterKey(p, u);
+    const { publicKey, privateKey } = await generateIdentity();
+    const encryptedPriv = await encryptWithKey(JSON.stringify(privateKey), masterKey);
+
+    // Save to localStorage (encrypted private key only)
+    localStorage.setItem('pc_user_' + u, JSON.stringify({
+      publicKey,
+      encryptedPriv
+    }));
+
+    // Start session
+    myPrivKey = privateKey;
+    myPubKey = publicKey;
+    myUsername = u;
+    startPeer();
+  } catch (e) {
+    showErr('su_err', 'Error: ' + e.message);
+  }
+}
+
+async function login() {
+  const u = li_user.value.trim().toLowerCase();
+  const p = li_pass.value;
+  li_err.classList.add('hidden');
+
+  const stored = localStorage.getItem('pc_user_' + u);
+  if (!stored) return showErr('li_err','Username nahi mila. Pehle account banayein.');
+
+  try {
+    const data = JSON.parse(stored);
+    const masterKey = await deriveMasterKey(p, u);
+    const privateKey = JSON.parse(await decryptWithKey(data.encryptedPriv, masterKey));
+
+    myPrivKey = privateKey;
+    myPubKey = data.publicKey;
+    myUsername = u;
+    startPeer();
+  } catch (e) {
+    showErr('li_err','Password galat ya data kharab');
+  }
+}
+
+function logout() {
+  if (conn) conn.close();
+  if (peer) peer.destroy();
+  myUsername = null; myPrivKey = null; myPubKey = null; peerPubKey = null;
+  mainScreen.classList.add('hidden');
+  authScreen.classList.remove('hidden');
+}
+
+// =========================================================
+//   PEERJS — P2P Connection
+// =========================================================
+function startPeer() {
+  authScreen.classList.add('hidden');
+  mainScreen.classList.remove('hidden');
+  myId.textContent = myUsername;
+
+  // PeerJS ID = username (simple, unique per user)
+  peer = new Peer(myUsername, {
+    debug: 1,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    }
+  });
+
+  peer.on('open', id => {
+    connStatus.className = 'status ok';
+    connStatus.textContent = '✅ Online — ID: ' + id;
+  });
+
+  peer.on('connection', c => {
+    conn = c;
+    setupConnection();
+  });
+
+  peer.on('error', err => {
+    connStatus.className = 'status err';
+    if (err.type === 'unavailable-id') {
+      connStatus.textContent = '❌ Ye username pehle se koi use kar raha hai';
+    } else if (err.type === 'peer-unavailable') {
+      connStatus.textContent = '❌ Dost online nahi hai';
+    } else {
+      connStatus.textContent = '❌ Error: ' + err.type;
+    }
+  });
+
+  peer.on('disconnected', () => {
+    connStatus.className = 'status wait';
+    connStatus.textContent = 'Reconnect ho raha hai...';
+    peer.reconnect();
+  });
+}
+
+function connectToPeer() {
+  const target = peerId.value.trim().toLowerCase();
+  if (!target) return;
+  if (target === myUsername) return alert('Khud se connect nahi kar sakte');
+
+  connStatus.className = 'status wait';
+  connStatus.textContent = 'Dost se jud rahe hain...';
+
+  conn = peer.connect(target, { reliable: true, metadata: { publicKey: myPubKey } });
+  setupConnection();
+}
+
+function setupConnection() {
+  conn.on('open', () => {
+    chatCard.classList.remove('hidden');
+    peerLabel.textContent = '💬 ' + conn.peer;
+    connStatus.className = 'status ok';
+    connStatus.textContent = '✅ Connected with ' + conn.peer;
+
+    // Exchange public keys
+    conn.send({ type: 'hello', publicKey: myPubKey });
+  });
+
+  conn.on('data', async data => {
+    if (data.type === 'hello') {
+      peerPubKey = data.publicKey;
       return;
     }
-    conn = c;
-    ready = true;
-    setupConnection(c);
-    c.send({ type: 'accept' });
-    $('friendId').value = c.peer;
-    setStatus('Connected ✅');
-    updateButtons();
+    if (data.type === 'msg') {
+      if (!peerPubKey) return;
+      try {
+        const text = await decryptMessage(data.payload, myPrivKey, peerPubKey);
+        addMessage(text, 'in', data.time);
+      } catch (e) {
+        addMessage('[decrypt fail]', 'in');
+      }
+    }
   });
-});
 
-function sendMessage() {
-  const text = $('msg').value.trim();
-  if (!text || !ready) return;
-  conn.send({ type: 'chat', text });
-  addMessage('Aap', text);
-  $('msg').value = '';
-}
-$('sendBtn').onclick = sendMessage;
-$('msg').onkeydown = e => { if (e.key === 'Enter') sendMessage(); };
-
-// ---------- Call ----------
-async function getMedia(video, myCall) {
-  const s = await navigator.mediaDevices.getUserMedia({ audio: true, video });
-  if (myCall !== callNo) {        // is beech call band ho gayi
-    s.getTracks().forEach(t => t.stop());
-    return null;
-  }
-  stream = s;
-  $('localVideo').srcObject = s;
-  return s;
-}
-
-function setupCall(c) {
-  call = c;
-  c.on('stream', remote => {
-    if (c !== call) return;
-    $('remoteVideo').srcObject = remote;
-    $('remoteVideo').play().catch(() => setStatus('Awaaz ke liye video par tap karein.'));
-    setStatus('Call chalu hai 📞');
+  conn.on('close', () => {
+    connStatus.className = 'status err';
+    connStatus.textContent = '❌ Connection band ho gayi';
+    chatCard.classList.add('hidden');
+    conn = null;
+    peerPubKey = null;
   });
-  c.on('close', () => { if (c === call) endCall(false); });
-  c.on('error', () => { if (c === call) endCall(true); });
+
+  conn.on('error', err => {
+    console.error(err);
+  });
 }
 
-async function startCall(video) {
-  if (!ready || busy) return;
-  busy = true;
-  const myCall = ++callNo;
-  updateButtons();
-  try {
-    const s = await getMedia(video, myCall);
-    if (!s) return;
-    setupCall(peer.call(conn.peer, s, { metadata: { video } }));
-    setStatus('Call ja rahi hai...');
-  } catch (e) {
-    setStatus('Camera/mic nahi mila: ' + e.name);
-    endCall(false);
-  }
+function disconnect() {
+  if (conn) conn.close();
 }
 
-peer.on('call', async incoming => {
-  // Sirf connected dost ki call
-  if (!ready || incoming.peer !== conn.peer || busy) return incoming.close();
-  busy = true;
-  const myCall = ++callNo;
-  call = incoming;
-  updateButtons();
-  const video = !!(incoming.metadata && incoming.metadata.video);
-  if (!confirm((video ? 'Video' : 'Audio') + ' call aa rahi hai. Uthayein?')) {
-    return endCall(true);
-  }
-  try {
-    const s = await getMedia(video, myCall);
-    if (!s) return;
-    setupCall(incoming);
-    incoming.answer(s);
-  } catch (e) {
-    setStatus('Camera/mic nahi mila: ' + e.name);
-    endCall(true);
-  }
-});
+// =========================================================
+//   MESSAGING
+// =========================================================
+async function sendMessage() {
+  const text = msgInput.value.trim();
+  if (!text || !conn || !peerPubKey) return;
+  msgInput.value = '';
 
-function endCall(tellFriend) {
-  if (!busy) return;
-  busy = false;
-  callNo++;
-  const old = call;
-  call = null;
-  if (old) old.close();
-  if (stream) stream.getTracks().forEach(t => t.stop());
-  stream = null;
-  $('localVideo').srcObject = null;
-  $('remoteVideo').srcObject = null;
-  if (tellFriend && ready) conn.send({ type: 'hangup' });
-  if (ready) setStatus('Connected ✅');
-  updateButtons();
+  const payload = await encryptMessage(text, myPrivKey, peerPubKey);
+  conn.send({ type: 'msg', payload, time: Date.now() });
+  addMessage(text, 'out', Date.now());
 }
 
-$('audioBtn').onclick = () => startCall(false);
-$('videoBtn').onclick = () => startCall(true);
-$('endBtn').onclick = () => endCall(true);
-$('remoteVideo').onclick = () => $('remoteVideo').play();
+function addMessage(text, dir, time) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + dir;
+  div.innerHTML = escapeHtml(text) + '<span class="meta">' + new Date(time).toLocaleTimeString() + '</span>';
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
 
-$('copyBtn').onclick = () => {
-  navigator.clipboard.writeText(myId)
-    .then(() => setStatus('ID copy ho gayi.'))
-    .catch(() => setStatus('ID ko dabakar rakhein aur copy karein.'));
-};
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function copyId() {
+  navigator.clipboard.writeText(myUsername).then(() => {
+    const old = connStatus.textContent;
+    connStatus.className = 'status ok';
+    connStatus.textContent = '📋 ID copy ho gayi!';
+    setTimeout(() => { connStatus.textContent = old; }, 1500);
+  });
+}
 </script>
 </body>
 </html>
